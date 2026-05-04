@@ -3,14 +3,33 @@
   GPS Buddy encrypted trace decryptor stub (GitHub Pages).
   URL shape: ?blob=<URL-encoded https URL>#k=<base64url key>&iv=<base64url iv>
   Crypto:    AES-GCM-256, 12-byte IV, 16-byte auth tag (WebCrypto default tagLength=128).
-  Blob:      ciphertext ‖ tag — iOS must strip CryptoKit's leading 12-byte nonce before upload; nonce is sent separately as #iv.
-  CORS:      Blob is fetched directly. GitHub release-asset URLs (github.com/.../releases/download/...) redirect to objects.githubusercontent.com, which sends Access-Control-Allow-Origin: *. iOS sets ?blob= to the github.com release-download URL; no proxy is involved.
+  Blob:      ciphertext ‖ tag — iOS must strip CryptoKit's leading 12-byte nonce before upload;
+             nonce is sent separately in the URL fragment as `iv`.
+  CORS:      Blob is fetched directly. The Cloudflare Worker that serves the encrypted blob
+             responds with Access-Control-Allow-Origin: *, so no proxy is needed. iOS sets
+             ?blob= to the Worker's public read URL.
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GPS Buddy trace</title>
+<title>GPS trace</title>
+
+<!-- Open Graph (iMessage, WhatsApp, Slack, Mail, LinkedIn, Discord) -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="GPS trace">
+<meta property="og:description" content="Encrypted location trace.">
+<meta property="og:image" content="https://andreas424242.github.io/GPS/preview.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="GPS trace preview">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="GPS trace">
+<meta name="twitter:description" content="Encrypted location trace.">
+<meta name="twitter:image" content="https://andreas424242.github.io/GPS/preview.png">
+
 <style>
   html,body,iframe{margin:0;padding:0;width:100%;height:100%;border:0}
   body{background:#fafafa}
@@ -56,7 +75,7 @@
       return bytes;
     };
 
-    // 3. Fetch ciphertext directly. GitHub release assets are CORS-friendly.
+    // 3. Fetch ciphertext directly. The Cloudflare Worker sets CORS headers.
     let resp;
     try {
       resp = await fetch(blobURL);
