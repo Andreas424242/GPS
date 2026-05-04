@@ -1,0 +1,31 @@
+name: Delete expired trace releases
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 03:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete releases older than 24h whose tag starts with share-
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          gh release list -R "${{ github.repository }}" --limit 1000 \
+              --json tagName,createdAt \
+            | jq -r --arg cutoff "$cutoff" \
+              '.[] | select(.createdAt < $cutoff and (.tagName | startswith("share-"))) | .tagName' \
+            | while IFS= read -r tag; do
+                echo "Deleting $tag"
+                gh release delete "$tag" \
+                  -R "${{ github.repository }}" \
+                  --yes \
+                  --cleanup-tag
+              done
