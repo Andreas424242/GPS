@@ -4,7 +4,7 @@
   URL shape: ?blob=<URL-encoded https URL>#k=<base64url key>&iv=<base64url iv>
   Crypto:    AES-GCM-256, 12-byte IV, 16-byte auth tag (WebCrypto default tagLength=128).
   Blob:      ciphertext ‖ tag — iOS must strip CryptoKit's leading 12-byte nonce before upload; nonce is sent separately as #iv.
-  CORS:      Litterbox does not send Access-Control-Allow-Origin, so this stub fetches via https://corsproxy.io/?<encoded blob URL>. iOS sets ?blob= to the *original* Litterbox URL; the stub prepends the proxy itself.
+  CORS:      Blob is fetched directly. GitHub release-asset URLs (github.com/.../releases/download/...) redirect to objects.githubusercontent.com, which sends Access-Control-Allow-Origin: *. iOS sets ?blob= to the github.com release-download URL; no proxy is involved.
 -->
 <html lang="en">
 <head>
@@ -56,10 +56,10 @@
       return bytes;
     };
 
-    // 3. Fetch ciphertext via CORS proxy.
+    // 3. Fetch ciphertext directly. GitHub release assets are CORS-friendly.
     let resp;
     try {
-      resp = await fetch("https://corsproxy.io/?url=" + encodeURIComponent(blobURL));
+      resp = await fetch(blobURL);
     } catch {
       throw new Error("NETWORK");
     }
