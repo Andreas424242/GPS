@@ -59,7 +59,7 @@
     // 3. Fetch ciphertext via CORS proxy.
     let resp;
     try {
-      resp = await fetch("https://corsproxy.io/?" + encodeURIComponent(blobURL));
+      resp = await fetch("https://corsproxy.io/?url=" + encodeURIComponent(blobURL));
     } catch {
       throw new Error("NETWORK");
     }
