@@ -15,7 +15,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GPS trace</title>
 
-<!-- Open Graph (iMessage, WhatsApp, Slack, Mail, LinkedIn, Discord) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="GPS trace">
 <meta property="og:description" content="Encrypted location trace.">
@@ -24,23 +23,121 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="GPS trace preview">
 
-<!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="GPS trace">
 <meta name="twitter:description" content="Encrypted location trace.">
 <meta name="twitter:image" content="https://sputnik-export.onemansoftware.com/preview.png">
 
 <style>
-  html,body,iframe{margin:0;padding:0;width:100%;height:100%;border:0;background:#000508}
-  .status{
-    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
-    padding:1.5rem;text-align:center;color:#bbb;
-    font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  html, body, iframe {
+    margin: 0; padding: 0; width: 100%; height: 100%; border: 0;
+    background: #000508;
+  }
+
+  .status {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 28px;
+    padding: 1.5rem; text-align: center;
+    color: #00D4FF;
+    font: 13px/1.5 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    overflow: hidden;
+  }
+
+  /* Sweep scanline that travels down the screen */
+  .status::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(0, 212, 255, 0.0) 10%,
+      rgba(0, 212, 255, 0.85) 50%,
+      rgba(0, 212, 255, 0.0) 90%,
+      transparent 100%);
+    box-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+    animation: sweep 3.5s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes sweep {
+    0%   { top: -2px; opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+
+  /* Faint horizontal scan-line texture across the whole screen */
+  .status::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 2px,
+      rgba(0, 212, 255, 0.04) 3px,
+      rgba(0, 212, 255, 0.04) 4px
+    );
+    pointer-events: none;
+  }
+
+  .label {
+    text-shadow:
+      0 0 4px rgba(0, 212, 255, 0.7),
+      0 0 16px rgba(0, 212, 255, 0.35);
+    animation: flicker 4s steps(1, end) infinite;
+    position: relative; z-index: 1;
+  }
+
+  /* Subtle CRT flicker — most frames at full opacity, a few dimmed */
+  @keyframes flicker {
+    0%, 7%, 14%, 21%, 28%, 35%, 42%, 49%, 56%, 63%, 70%, 77%, 84%, 91%, 98%, 100% { opacity: 1; }
+    8%   { opacity: 0.65; }
+    22%  { opacity: 0.55; }
+    50%  { opacity: 0.7; }
+    78%  { opacity: 0.5; }
+  }
+
+  /* Blinking cursor after the label */
+  .cursor {
+    display: inline-block;
+    width: 0.6em; height: 1em;
+    background: #00D4FF;
+    margin-left: 4px;
+    vertical-align: middle;
+    box-shadow: 0 0 6px #00D4FF, 0 0 14px rgba(0, 212, 255, 0.5);
+    animation: blink 1.0s steps(2, jump-none) infinite;
+  }
+  @keyframes blink {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+
+  /* Tiny status hint below */
+  .hint {
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: rgba(0, 212, 255, 0.5);
+    text-shadow: 0 0 4px rgba(0, 212, 255, 0.3);
+    position: relative; z-index: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .status::before, .label, .cursor { animation: none; }
+    .status::before { display: none; }
+    .cursor { opacity: 1; }
   }
 </style>
 </head>
 <body>
-<div id="status" class="status">Loading trace…</div>
+<div id="status" class="status">
+  <span class="label">Decrypting trace<span class="cursor"></span></span>
+  <span class="hint">AES-GCM-256 · End-to-end encrypted</span>
+</div>
 <script type="module">
 (async () => {
   const showError = (err) => {
@@ -52,11 +149,18 @@
     };
     const msg = map[err && err.message] || map.NETWORK;
     const el = document.getElementById("status");
-    if (el) el.textContent = msg;
+    if (el) {
+      el.innerHTML = '';
+      el.style.color = '#FF4444';
+      el.style.textShadow = '0 0 4px rgba(255, 68, 68, 0.6), 0 0 14px rgba(255, 68, 68, 0.35)';
+      el.style.letterSpacing = '0.04em';
+      el.style.textTransform = 'none';
+      el.style.fontSize = '15px';
+      el.textContent = msg;
+    }
   };
 
   try {
-    // 1. Parse inputs (fragment is read locally — never sent over the network).
     const params = new URLSearchParams(location.search);
     const blobURL = params.get("blob");
     const fragParams = new URLSearchParams(location.hash.slice(1));
@@ -64,7 +168,6 @@
     const ivB64u  = fragParams.get("iv");
     if (!blobURL || !keyB64u || !ivB64u) throw new Error("INCOMPLETE_LINK");
 
-    // 2. base64url -> bytes (RFC 4648 §5; tolerates missing padding).
     const b64uToBytes = (s) => {
       const pad = "=".repeat((4 - s.length % 4) % 4);
       const b64 = (s + pad).replace(/-/g, "+").replace(/_/g, "/");
@@ -74,7 +177,6 @@
       return bytes;
     };
 
-    // 3. Fetch ciphertext directly. The Cloudflare Worker sets CORS headers.
     let resp;
     try {
       resp = await fetch(blobURL);
@@ -87,7 +189,6 @@
     }
     const ciphertext = new Uint8Array(await resp.arrayBuffer());
 
-    // 4. Import key + decrypt. WebCrypto reads the trailing 16 bytes as the tag automatically.
     const cryptoKey = await crypto.subtle.importKey(
       "raw", b64uToBytes(keyB64u), { name: "AES-GCM" }, false, ["decrypt"]
     );
@@ -103,8 +204,6 @@
       throw new Error("DECRYPT_FAILED");
     }
 
-    // 5. Render in sandboxed iframe. allow-scripts only — *not* allow-same-origin,
-    //    so the trace HTML can never read this stub's URL fragment (which holds the key).
     const iframe = document.createElement("iframe");
     iframe.setAttribute("sandbox", "allow-scripts");
     iframe.srcdoc = plaintext;
