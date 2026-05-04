@@ -1,0 +1,100 @@
+<!doctype html>
+<!--
+  GPS Buddy encrypted trace decryptor stub (GitHub Pages).
+  URL shape: ?blob=<URL-encoded https URL>#k=<base64url key>&iv=<base64url iv>
+  Crypto:    AES-GCM-256, 12-byte IV, 16-byte auth tag (WebCrypto default tagLength=128).
+  Blob:      ciphertext ‖ tag — iOS must strip CryptoKit's leading 12-byte nonce before upload; nonce is sent separately as #iv.
+  CORS:      Litterbox does not send Access-Control-Allow-Origin, so this stub fetches via https://corsproxy.io/?<encoded blob URL>. iOS sets ?blob= to the *original* Litterbox URL; the stub prepends the proxy itself.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPS Buddy trace</title>
+<style>
+  html,body,iframe{margin:0;padding:0;width:100%;height:100%;border:0}
+  body{background:#fafafa}
+  .status{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    padding:1.5rem;text-align:center;color:#333;
+    font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+</style>
+</head>
+<body>
+<div id="status" class="status">Loading trace…</div>
+<script type="module">
+(async () => {
+  const showError = (err) => {
+    const map = {
+      INCOMPLETE_LINK: "This link is incomplete. Please ask the sender to share it again.",
+      EXPIRED:         "This trace has expired. Encrypted traces are only available for 24 hours.",
+      DECRYPT_FAILED:  "This trace could not be decrypted. The link may be corrupt.",
+      NETWORK:         "Could not load the trace. Check your connection and try again.",
+    };
+    const msg = map[err && err.message] || map.NETWORK;
+    const el = document.getElementById("status");
+    if (el) el.textContent = msg;
+  };
+
+  try {
+    // 1. Parse inputs (fragment is read locally — never sent over the network).
+    const params = new URLSearchParams(location.search);
+    const blobURL = params.get("blob");
+    const fragParams = new URLSearchParams(location.hash.slice(1));
+    const keyB64u = fragParams.get("k");
+    const ivB64u  = fragParams.get("iv");
+    if (!blobURL || !keyB64u || !ivB64u) throw new Error("INCOMPLETE_LINK");
+
+    // 2. base64url -> bytes (RFC 4648 §5; tolerates missing padding).
+    const b64uToBytes = (s) => {
+      const pad = "=".repeat((4 - s.length % 4) % 4);
+      const b64 = (s + pad).replace(/-/g, "+").replace(/_/g, "/");
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return bytes;
+    };
+
+    // 3. Fetch ciphertext via CORS proxy.
+    let resp;
+    try {
+      resp = await fetch("https://corsproxy.io/?" + encodeURIComponent(blobURL));
+    } catch {
+      throw new Error("NETWORK");
+    }
+    if (!resp.ok) {
+      if (resp.status === 404 || resp.status === 410) throw new Error("EXPIRED");
+      throw new Error("NETWORK");
+    }
+    const ciphertext = new Uint8Array(await resp.arrayBuffer());
+
+    // 4. Import key + decrypt. WebCrypto reads the trailing 16 bytes as the tag automatically.
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw", b64uToBytes(keyB64u), { name: "AES-GCM" }, false, ["decrypt"]
+    );
+    let plaintext;
+    try {
+      const buf = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: b64uToBytes(ivB64u) },
+        cryptoKey,
+        ciphertext
+      );
+      plaintext = new TextDecoder("utf-8").decode(buf);
+    } catch {
+      throw new Error("DECRYPT_FAILED");
+    }
+
+    // 5. Render in sandboxed iframe. allow-scripts only — *not* allow-same-origin,
+    //    so the trace HTML can never read this stub's URL fragment (which holds the key).
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("sandbox", "allow-scripts");
+    iframe.srcdoc = plaintext;
+    document.body.replaceChildren(iframe);
+  } catch (err) {
+    showError(err);
+  }
+})();
+</script>
+</body>
+</html>
